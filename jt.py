@@ -114,6 +114,8 @@ class StringPropertyAtom(BasePropertyAtom):
         BasePropertyAtom.__init__(self, data)
         versionNumber, count = struct.unpack("=HI", data.read(6))
         self.value = data.read(count*2).decode("utf-16")
+    def __repr__(self):
+        return repr(self.value)
 class LateLoadedPropertyAtom(BasePropertyAtom):
     def __init__(self, data):
         BasePropertyAtom.__init__(self, data)
