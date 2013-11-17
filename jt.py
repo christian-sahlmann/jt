@@ -185,5 +185,6 @@ versionNumber, elementPropertyTableCount = struct.unpack("=HI", objectData.read(
 for i in range(elementPropertyTableCount):
     elementObjectId, keyPropertyAtomObjectId = struct.unpack("=II", objectData.read(8))
     while keyPropertyAtomObjectId != 0:
-        valuePropertyAtomObjectId, keyPropertyAtomObjectId = struct.unpack("=II", objectData.read(8))
+        valuePropertyAtomObjectId, = struct.unpack("=I", objectData.read(4))
         elements[keyPropertyAtomObjectId].properties.append(elements[valuePropertyAtomObjectId])
+        keyPropertyAtomObjectId, = struct.unpack("=I", objectData.read(4))
