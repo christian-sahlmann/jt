@@ -7,7 +7,7 @@ from uuid import UUID
 
 class LogicalElement:
     def __init__(self, data):
-        self.properties = list()
+        self.properties = dict()
         self.objectBaseType, objectId = struct.unpack("=BI", element.read(5))
         elements[objectId] = self
 class BaseNode(LogicalElement):
@@ -186,7 +186,7 @@ for i in range(elementPropertyTableCount):
     elementObjectId, keyPropertyAtomObjectId = struct.unpack("=II", objectData.read(8))
     while keyPropertyAtomObjectId != 0:
         valuePropertyAtomObjectId, = struct.unpack("=I", objectData.read(4))
-        elements[keyPropertyAtomObjectId].properties.append(elements[valuePropertyAtomObjectId])
+        elements[elementObjectId].properties[elements[keyPropertyAtomObjectId]] = elements[valuePropertyAtomObjectId]
         keyPropertyAtomObjectId, = struct.unpack("=I", objectData.read(4))
 
 for element in elements.values():
