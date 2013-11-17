@@ -188,3 +188,10 @@ for i in range(elementPropertyTableCount):
         valuePropertyAtomObjectId, = struct.unpack("=I", objectData.read(4))
         elements[keyPropertyAtomObjectId].properties.append(elements[valuePropertyAtomObjectId])
         keyPropertyAtomObjectId, = struct.unpack("=I", objectData.read(4))
+
+for element in elements.values():
+    if isinstance(element, GroupNode):
+        element.childNode = list()
+        for child in element.childNodeObjectId:
+            element.childNode.append(elements[child])
+        del element.childNodeObjectId
