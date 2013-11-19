@@ -5,6 +5,11 @@ import warnings
 import zlib
 from uuid import UUID
 
+class TocEntry:
+    def __init__(self, segmentOffset, segmentLength, segmentAttributes):
+        self.segmentOffset = segmentOffset
+        self.segmentLength = segmentLength
+        self.segmentAttributes = segmentAttributes
 class LogicalElement:
     def __init__(self, data):
         self.objectBaseType, self.objectId = struct.unpack("=BI", element.read(5))
@@ -154,15 +159,16 @@ f = open(sys.argv[1], "rb")
 version, byteOrder, reservedField, tocOffset, lsgSegmentId = struct.unpack("=80s?II16s", f.read(105))
 lsgSegmentId = UUID(bytes_le=lsgSegmentId)
 
+tocSegment = dict()
 f.seek(tocOffset)
 entryCount = struct.unpack("=I", f.read(4))[0]
 for entry in range(entryCount):
-    segmentId, segmentOffset, segmentLength, segmentAttributes = struct.unpack("=16sIII", f.read(28))
-    if lsgSegmentId == UUID(bytes_le=segmentId):
-        break
+    segmentId = UUID(bytes_le=f.read(16))
+    tocSegment[segmentId] = TocEntry(*struct.unpack("=III", f.read(12)))
 
-f.seek(segmentOffset)
-dataSegment = io.BytesIO(f.read(segmentLength))
+lsgSegmentEntry = tocSegment[lsgSegmentId]
+f.seek(lsgSegmentEntry.segmentOffset)
+dataSegment = io.BytesIO(f.read(lsgSegmentEntry.segmentLength))
 segmentId, segmentType, segmentLength = struct.unpack("=16sII", dataSegment.read(24))
 
 compressionFlag, compressedDataLength, compressionAlgorithm, = struct.unpack("=IIB", dataSegment.read(9))
