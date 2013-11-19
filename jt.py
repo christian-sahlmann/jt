@@ -67,6 +67,7 @@ class LogicalElement:
             (0x10dd106e, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): StringPropertyAtom,
             (0xe0b05be5, 0xfbbd, 0x11d1, 0xa3, 0xa7, 0x00aa00d10954): LateLoadedPropertyAtom,
             (0x10dd1019, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): FloatingPointPropertyAtom,
+            (0xce357247, 0x38fb, 0x11d1, 0xa5, 0x06, 0x006097bdc6e1): PropertyProxyMetaData
             }
         objectTypeIdentifiers = dict((UUID(fields=k), v) for (k,v) in objectTypeIdentifiers.items())
 
@@ -195,6 +196,24 @@ class FloatingPointPropertyAtom(BasePropertyAtom):
     def __init__(self, data):
         BasePropertyAtom.__init__(self, data)
         versionNumber, self.value = struct.unpack("=Hf", data.read(6))
+class PropertyProxyMetaData:
+    def __init__(self, data):
+        versionNumber, count = struct.unpack("=HI", data.read(6))
+        self.property = dict()
+        while count > 0:
+            propertyKey = data.read(count*2).decode("utf-16")
+            propertyValueType, = struct.unpack("=B", data.read(1))
+            if propertyValueType == 1:
+                count, = struct.unpack("=I", data.read(4))
+                propertyValue = data.read(count*2).decode("utf-16")
+            elif propertyValueType == 2:
+                propertyValue, = struct.unpack("=I", data.read(4))
+            elif propertyValueType == 3:
+                propertyValue, = struct.unpack("=f", data.read(4))
+            elif propertyValueType == 4:
+                propertyValue = struct.unpack("=6H", data.read(12))
+            self.property[propertyKey] = propertyValue
+            count, = struct.unpack("=I", data.read(4))
 
 f = open(sys.argv[1], "rb")
 version, byteOrder, reservedField, tocOffset, lsgSegmentId = struct.unpack("=80s?II16s", f.read(105))
