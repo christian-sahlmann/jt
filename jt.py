@@ -7,7 +7,6 @@ from uuid import UUID
 
 class LogicalElement:
     def __init__(self, data):
-        self.properties = dict()
         self.objectBaseType, objectId = struct.unpack("=BI", element.read(5))
         elements[objectId] = self
 class BaseNode(LogicalElement):
@@ -15,6 +14,7 @@ class BaseNode(LogicalElement):
         LogicalElement.__init__(self, data)
         versionNumber, self.nodeFlags, attributeCount = struct.unpack("=HII", data.read(10))
         self.attributeObjectId = struct.unpack("={}I".format(attributeCount), data.read(4*attributeCount))
+        self.property = dict()
 class GroupNode(BaseNode):
     def __init__(self, data):
         BaseNode.__init__(self, data)
@@ -75,6 +75,7 @@ class BaseAttribute(LogicalElement):
     def __init__(self, data):
         LogicalElement.__init__(self, data)
         versionNumber, self.stateFlags, self.fieldInhibitFlags = struct.unpack("=HBI", data.read(7))
+        self.property = dict()
 class MaterialAttribute(BaseAttribute):
     def __init__(self, data):
         BaseAttribute.__init__(self, data)
@@ -186,7 +187,7 @@ for i in range(elementPropertyTableCount):
     elementObjectId, keyPropertyAtomObjectId = struct.unpack("=II", objectData.read(8))
     while keyPropertyAtomObjectId != 0:
         valuePropertyAtomObjectId, = struct.unpack("=I", objectData.read(4))
-        elements[elementObjectId].properties[elements[keyPropertyAtomObjectId]] = elements[valuePropertyAtomObjectId]
+        elements[elementObjectId].property[elements[keyPropertyAtomObjectId]] = elements[valuePropertyAtomObjectId]
         keyPropertyAtomObjectId, = struct.unpack("=I", objectData.read(4))
 
 for element in elements.values():
