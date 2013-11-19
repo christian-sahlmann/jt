@@ -79,7 +79,10 @@ class LogicalElement:
             (0x10dd106e, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): StringPropertyAtom,
             (0xe0b05be5, 0xfbbd, 0x11d1, 0xa3, 0xa7, 0x00aa00d10954): LateLoadedPropertyAtom,
             (0x10dd1019, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): FloatingPointPropertyAtom,
-            (0xce357247, 0x38fb, 0x11d1, 0xa5, 0x06, 0x006097bdc6e1): PropertyProxyMetaData
+            (0xce357247, 0x38fb, 0x11d1, 0xa5, 0x06, 0x006097bdc6e1): PropertyProxyMetaData,
+            (0x10dd10a4, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): BaseShapeLod,
+            (0x10dd10b0, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): VertexShapeLod,
+            (0x10dd10ab, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): TriStripSetShapeLod,
             }
         objectTypeIdentifiers = dict((UUID(fields=k), v) for (k,v) in objectTypeIdentifiers.items())
 
@@ -226,6 +229,15 @@ class PropertyProxyMetaData:
                 propertyValue = struct.unpack("=6H", data.read(12))
             self.property[propertyKey] = propertyValue
             count, = struct.unpack("=I", data.read(4))
+class BaseShapeLod:
+    def __init__(self, data):
+        versionNumber, = struct.unpack("=H", data.read(2))
+class VertexShapeLod:
+    def __init__(self, data):
+        BaseShapeLod.__init__(self, data)
+        versionNumber, self.vertexBindings = struct.unpack("=HQ", data.read(10))
+class TriStripSetShapeLod(VertexShapeLod):
+    pass
 
 f = open(sys.argv[1], "rb")
 version, byteOrder, reservedField, tocOffset, lsgSegmentId = struct.unpack("=80s?II16s", f.read(105))
