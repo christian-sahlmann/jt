@@ -7,8 +7,8 @@ from uuid import UUID
 
 class LogicalElement:
     def __init__(self, data):
-        self.objectBaseType, objectId = struct.unpack("=BI", element.read(5))
-        elements[objectId] = self
+        self.objectBaseType, self.objectId = struct.unpack("=BI", element.read(5))
+        elements[self.objectId] = self
 class BaseNode(LogicalElement):
     def __init__(self, data):
         LogicalElement.__init__(self, data)
@@ -111,12 +111,12 @@ class BasePropertyAtom(LogicalElement):
         LogicalElement.__init__(self, data)
         versionNumber, self.stateFlags = struct.unpack("=HI", data.read(6))
 class StringPropertyAtom(BasePropertyAtom):
-    def __init__(self, data):
-        BasePropertyAtom.__init__(self, data)
+    def __new__(cls, data):
+        basePropertyAtom = BasePropertyAtom(data)
         versionNumber, count = struct.unpack("=HI", data.read(6))
-        self.value = data.read(count*2).decode("utf-16")
-    def __repr__(self):
-        return repr(self.value)
+        value = data.read(count*2).decode("utf-16")
+        elements[basePropertyAtom.objectId] = value
+        return value
 class LateLoadedPropertyAtom(BasePropertyAtom):
     def __init__(self, data):
         BasePropertyAtom.__init__(self, data)
