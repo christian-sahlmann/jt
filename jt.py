@@ -1,22 +1,85 @@
 import io
 import struct
 import sys
-import warnings
 import zlib
 from uuid import UUID
+
+elements = dict()
 
 class TocEntry:
     def __init__(self, segmentOffset, segmentLength, segmentAttributes):
         self.segmentOffset = segmentOffset
         self.segmentLength = segmentLength
         self.segmentAttributes = segmentAttributes
+class DataSegment:
+    def __new__(cls, data, tocEntry):
+        segmentTypes = {
+            1: LsgSegment,
+            }
+        data.seek(tocEntry.segmentOffset)
+        segmentId = UUID(bytes_le=data.read(16))
+        segmentType, segmentLength = struct.unpack("=II", data.read(8))
+        compressionFlag, compressedDataLength, compressionAlgorithm = struct.unpack("=IIB", data.read(9))
+        objectData = io.BytesIO(zlib.decompress(data.read(compressedDataLength)))
+        return segmentTypes[segmentType](objectData)
+class LsgSegment:
+    def __init__(self, data):
+        for i in range(2):
+            while LogicalElement(data):
+                pass
+
+        versionNumber, elementPropertyTableCount = struct.unpack("=HI", data.read(6))
+        for i in range(elementPropertyTableCount):
+            elementObjectId, keyPropertyAtomObjectId = struct.unpack("=II", data.read(8))
+            while keyPropertyAtomObjectId != 0:
+                valuePropertyAtomObjectId, = struct.unpack("=I", data.read(4))
+                elements[elementObjectId].property[elements[keyPropertyAtomObjectId]] = elements[valuePropertyAtomObjectId]
+                keyPropertyAtomObjectId, = struct.unpack("=I", data.read(4))
+
+        for element in elements.values():
+            if isinstance(element, GroupNode):
+                element.childNode = list()
+                for child in element.childNodeObjectId:
+                    element.childNode.append(elements[child])
+                del element.childNodeObjectId
+
 class LogicalElement:
+    def __new__(cls, data):
+        objectTypeIdentifiers = {
+            (0xffffffff, 0xffff, 0xffff, 0xff, 0xff, 0xffffffffffff): None,
+            (0x10dd1035, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): BaseNode,
+            (0x10dd101b, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): GroupNode,
+            (0x10dd102a, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): InstanceNode,
+            (0x10dd102c, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): LodNode,
+            (0xce357245, 0x38fb, 0x11d1, 0xa5, 0x06, 0x006097bdc6e1): MetaDataNode,
+            (0xce357244, 0x38fb, 0x11d1, 0xa5, 0x06, 0x006097bdc6e1): PartNode,
+            (0x10dd103e, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): PartitionNode,
+            (0x10dd104c, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): RangeLodNode,
+            (0x10dd1059, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): BaseShapeNode,
+            (0x10dd107f, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): VertexShapeNode,
+            (0x10dd1077, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): TriStripSetShapeNode,
+            (0x10dd1030, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): MaterialAttribute,
+            (0x10dd1046, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): PolylineSetShapeNode,
+            (0x10dd1083, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): GeometricTransformAttribute,
+            (0x10dd104b, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): BasePropertyAtom,
+            (0x10dd106e, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): StringPropertyAtom,
+            (0xe0b05be5, 0xfbbd, 0x11d1, 0xa3, 0xa7, 0x00aa00d10954): LateLoadedPropertyAtom,
+            (0x10dd1019, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): FloatingPointPropertyAtom,
+            }
+        objectTypeIdentifiers = dict((UUID(fields=k), v) for (k,v) in objectTypeIdentifiers.items())
+
+        elementLength, = struct.unpack("=I", data.read(4))
+        element = io.BytesIO(data.read(elementLength))
+        objectTypeId = UUID(bytes_le=element.read(16))
+        objectType = objectTypeIdentifiers[objectTypeId]
+        if not objectType:
+            return
+        objectBaseType, objectId = struct.unpack("=BI", element.read(5))
+        logicalElement = objectType(element)
+        elements[objectId] = logicalElement
+        return logicalElement
+class BaseNode:
     def __init__(self, data):
-        self.objectBaseType, self.objectId = struct.unpack("=BI", element.read(5))
-        elements[self.objectId] = self
-class BaseNode(LogicalElement):
-    def __init__(self, data):
-        LogicalElement.__init__(self, data)
         versionNumber, self.nodeFlags, attributeCount = struct.unpack("=HII", data.read(10))
         self.attributeObjectId = struct.unpack("={}I".format(attributeCount), data.read(4*attributeCount))
         self.property = dict()
@@ -30,7 +93,7 @@ class PartitionNode(GroupNode):
         GroupNode.__init__(self, data)
         self.partitionFlags, count = struct.unpack("=II", data.read(8))
         self.fileName = data.read(count*2).decode("utf-16")
-        reservedField = struct.unpack("=6f", element.read(24))
+        reservedField = struct.unpack("=6f", data.read(24))
         if self.partitionFlags & 1 == 0:
             self.transformedBbox = reservedField
         self.area, = struct.unpack("=f", data.read(4))
@@ -76,9 +139,10 @@ class VertexShapeNode(BaseShapeNode):
         self.quantizationParameters = struct.unpack("=4B", data.read(4))
         if versionNumber != 1:
             self.vertexBinding, = struct.unpack("=Q", data.read(8))
-class BaseAttribute(LogicalElement):
+class TriStripSetShapeNode(VertexShapeNode):
+    pass
+class BaseAttribute:
     def __init__(self, data):
-        LogicalElement.__init__(self, data)
         versionNumber, self.stateFlags, self.fieldInhibitFlags = struct.unpack("=HBI", data.read(7))
         self.property = dict()
 class MaterialAttribute(BaseAttribute):
@@ -111,16 +175,14 @@ class GeometricTransformAttribute(BaseAttribute):
             if storedValuesMask & 0x8000:
                 self.elementValue[i] = struct.unpack("=ff", data.read(8))
             storedValuesMask = storedValuesMask << 1
-class BasePropertyAtom(LogicalElement):
+class BasePropertyAtom:
     def __init__(self, data):
-        LogicalElement.__init__(self, data)
         versionNumber, self.stateFlags = struct.unpack("=HI", data.read(6))
 class StringPropertyAtom(BasePropertyAtom):
     def __new__(cls, data):
         basePropertyAtom = BasePropertyAtom(data)
         versionNumber, count = struct.unpack("=HI", data.read(6))
         value = data.read(count*2).decode("utf-16")
-        elements[basePropertyAtom.objectId] = value
         return value
 class LateLoadedPropertyAtom(BasePropertyAtom):
     def __init__(self, data):
@@ -131,29 +193,6 @@ class FloatingPointPropertyAtom(BasePropertyAtom):
     def __init__(self, data):
         BasePropertyAtom.__init__(self, data)
         versionNumber, self.value = struct.unpack("=Hf", data.read(6))
-
-objectTypeIdentifiers = {
-    (0xffffffff, 0xffff, 0xffff, 0xff, 0xff, 0xffffffffffff): None,
-    (0x10dd1035, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): BaseNode,
-    (0x10dd101b, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): GroupNode,
-    (0x10dd102a, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): InstanceNode,
-    (0x10dd102c, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): LodNode,
-    (0xce357245, 0x38fb, 0x11d1, 0xa5, 0x06, 0x006097bdc6e1): MetaDataNode,
-    (0xce357244, 0x38fb, 0x11d1, 0xa5, 0x06, 0x006097bdc6e1): PartNode,
-    (0x10dd103e, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): PartitionNode,
-    (0x10dd104c, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): RangeLodNode,
-    (0x10dd1059, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): BaseShapeNode,
-    (0x10dd1077, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): VertexShapeNode,
-    (0x10dd107f, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): VertexShapeNode,
-    (0x10dd1030, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): MaterialAttribute,
-    (0x10dd1046, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): PolylineSetShapeNode,
-    (0x10dd1083, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): GeometricTransformAttribute,
-    (0x10dd104b, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): BasePropertyAtom,
-    (0x10dd106e, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): StringPropertyAtom,
-    (0xe0b05be5, 0xfbbd, 0x11d1, 0xa3, 0xa7, 0x00aa00d10954): LateLoadedPropertyAtom,
-    (0x10dd1019, 0x2ac8, 0x11d1, 0x9b, 0x6b, 0x0080c7bb5997): FloatingPointPropertyAtom,
-    }
-objectTypeIdentifiers = dict((UUID(fields=k), v) for (k,v) in objectTypeIdentifiers.items())
 
 f = open(sys.argv[1], "rb")
 version, byteOrder, reservedField, tocOffset, lsgSegmentId = struct.unpack("=80s?II16s", f.read(105))
@@ -166,39 +205,4 @@ for entry in range(entryCount):
     segmentId = UUID(bytes_le=f.read(16))
     tocSegment[segmentId] = TocEntry(*struct.unpack("=III", f.read(12)))
 
-lsgSegmentEntry = tocSegment[lsgSegmentId]
-f.seek(lsgSegmentEntry.segmentOffset)
-dataSegment = io.BytesIO(f.read(lsgSegmentEntry.segmentLength))
-segmentId, segmentType, segmentLength = struct.unpack("=16sII", dataSegment.read(24))
-
-compressionFlag, compressedDataLength, compressionAlgorithm, = struct.unpack("=IIB", dataSegment.read(9))
-objectData = io.BytesIO(zlib.decompress(dataSegment.read(compressedDataLength)))
-
-elements = dict()
-for i in range(2):
-    while True:
-        elementLength, = struct.unpack("=I", objectData.read(4))
-        element = io.BytesIO(objectData.read(elementLength))
-        objectTypeId = UUID(bytes_le=element.read(16))
-        Node = objectTypeIdentifiers[objectTypeId]
-        if Node == None:
-            break
-        node = Node(element)
-
-        if len(element.read()) > 0:
-            warnings.warn("FixMe: not all data from element read")
-
-versionNumber, elementPropertyTableCount = struct.unpack("=HI", objectData.read(6))
-for i in range(elementPropertyTableCount):
-    elementObjectId, keyPropertyAtomObjectId = struct.unpack("=II", objectData.read(8))
-    while keyPropertyAtomObjectId != 0:
-        valuePropertyAtomObjectId, = struct.unpack("=I", objectData.read(4))
-        elements[elementObjectId].property[elements[keyPropertyAtomObjectId]] = elements[valuePropertyAtomObjectId]
-        keyPropertyAtomObjectId, = struct.unpack("=I", objectData.read(4))
-
-for element in elements.values():
-    if isinstance(element, GroupNode):
-        element.childNode = list()
-        for child in element.childNodeObjectId:
-            element.childNode.append(elements[child])
-        del element.childNodeObjectId
+DataSegment(f, tocSegment[lsgSegmentId])
