@@ -16,12 +16,16 @@ class DataSegment:
         segmentTypes = {
             1: LsgSegment,
             4: MetaDataSegment,
+            6: ShapeLodSegment
             }
         data.seek(tocEntry.segmentOffset)
         segmentId = UUID(bytes_le=data.read(16))
         segmentType, segmentLength = struct.unpack("=II", data.read(8))
-        compressionFlag, compressedDataLength, compressionAlgorithm = struct.unpack("=IIB", data.read(9))
-        objectData = io.BytesIO(zlib.decompress(data.read(compressedDataLength)))
+        if segmentType <= 4:
+            compressionFlag, compressedDataLength, compressionAlgorithm = struct.unpack("=IIB", data.read(9))
+            objectData = io.BytesIO(zlib.decompress(data.read(compressedDataLength)))
+        else:
+            objectData = data
         return segmentTypes[segmentType](objectData)
 class LsgSegment:
     def __init__(self, data):
@@ -50,6 +54,9 @@ class MetaDataSegment:
     def __init__(self, data):
         while LogicalElement(data):
             pass
+class ShapeLodSegment:
+    def __init__(self,data):
+        LogicalElement(data)
 class LogicalElement:
     def __new__(cls, data):
         objectTypeIdentifiers = {
