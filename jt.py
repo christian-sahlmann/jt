@@ -36,10 +36,15 @@ class LsgSegment:
                 elements[elementObjectId].property[elements[keyPropertyAtomObjectId]] = elements[valuePropertyAtomObjectId]
                 keyPropertyAtomObjectId, = struct.unpack("=I", data.read(4))
         for element in elements.values():
+            if isinstance(element, BaseNode):
+                element.attribute = list()
+                for attributeObjectId in element.attributeObjectId:
+                    element.attribute.append(elements[attributeObjectId])
+                del element.attributeObjectId
             if isinstance(element, GroupNode):
                 element.childNode = list()
-                for child in element.childNodeObjectId:
-                    element.childNode.append(elements[child])
+                for childNodeObjectId in element.childNodeObjectId:
+                    element.childNode.append(elements[childNodeObjectId])
                 del element.childNodeObjectId
 class MetaDataSegment:
     def __init__(self, data):
