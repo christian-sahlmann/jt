@@ -15,6 +15,7 @@ class DataSegment:
     def __new__(cls, data, tocEntry):
         segmentTypes = {
             1: LsgSegment,
+            4: MetaDataSegment,
             }
         data.seek(tocEntry.segmentOffset)
         segmentId = UUID(bytes_le=data.read(16))
@@ -27,7 +28,6 @@ class LsgSegment:
         for i in range(2):
             while LogicalElement(data):
                 pass
-
         versionNumber, elementPropertyTableCount = struct.unpack("=HI", data.read(6))
         for i in range(elementPropertyTableCount):
             elementObjectId, keyPropertyAtomObjectId = struct.unpack("=II", data.read(8))
@@ -35,14 +35,16 @@ class LsgSegment:
                 valuePropertyAtomObjectId, = struct.unpack("=I", data.read(4))
                 elements[elementObjectId].property[elements[keyPropertyAtomObjectId]] = elements[valuePropertyAtomObjectId]
                 keyPropertyAtomObjectId, = struct.unpack("=I", data.read(4))
-
         for element in elements.values():
             if isinstance(element, GroupNode):
                 element.childNode = list()
                 for child in element.childNodeObjectId:
                     element.childNode.append(elements[child])
                 del element.childNodeObjectId
-
+class MetaDataSegment:
+    def __init__(self, data):
+        while LogicalElement(data):
+            pass
 class LogicalElement:
     def __new__(cls, data):
         objectTypeIdentifiers = {
